@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import os
 
 class TextWatermark:
@@ -14,6 +14,14 @@ class TextWatermark:
         self.opacity = 128  # 透明度 0-255
         self.position = (50, 50)  # 默认位置 (x, y)
         self.rotation = 0  # 旋转角度
+        self.bold = False  # 粗体
+        self.italic = False  # 斜体
+        self.shadow = False  # 阴影效果
+        self.shadow_color = (0, 0, 0)  # 阴影颜色
+        self.shadow_offset = (2, 2)  # 阴影偏移
+        self.stroke = False  # 描边效果
+        self.stroke_color = (0, 0, 0)  # 描边颜色
+        self.stroke_width = 1  # 描边宽度
     
     def set_text(self, text: str):
         """设置水印文本"""
@@ -39,6 +47,26 @@ class TextWatermark:
     def set_rotation(self, rotation: int):
         """设置旋转角度"""
         self.rotation = rotation
+    
+    def set_bold(self, bold: bool):
+        """设置粗体"""
+        self.bold = bold
+    
+    def set_italic(self, italic: bool):
+        """设置斜体"""
+        self.italic = italic
+    
+    def set_shadow(self, shadow: bool, color: tuple = (0, 0, 0), offset: tuple = (2, 2)):
+        """设置阴影效果"""
+        self.shadow = shadow
+        self.shadow_color = color
+        self.shadow_offset = offset
+    
+    def set_stroke(self, stroke: bool, color: tuple = (0, 0, 0), width: int = 1):
+        """设置描边效果"""
+        self.stroke = stroke
+        self.stroke_color = color
+        self.stroke_width = width
     
     def add_watermark(self, image: Image.Image) -> Image.Image:
         """
@@ -68,6 +96,22 @@ class TextWatermark:
         # 调整位置以确保文本在图片内
         x = max(0, min(self.position[0], image.width - text_width))
         y = max(0, min(self.position[1], image.height - text_height))
+        
+        # 绘制阴影
+        if self.shadow:
+            shadow_x, shadow_y = x + self.shadow_offset[0], y + self.shadow_offset[1]
+            shadow_color = (*self.shadow_color, int(self.opacity * 0.7))
+            draw.text((shadow_x, shadow_y), self.text, font=font, fill=shadow_color)
+        
+        # 绘制描边
+        if self.stroke:
+            # 绘制多个偏移的文本来模拟描边效果
+            for dx in range(-self.stroke_width, self.stroke_width + 1):
+                for dy in range(-self.stroke_width, self.stroke_width + 1):
+                    if dx != 0 or dy != 0:
+                        stroke_x, stroke_y = x + dx, y + dy
+                        stroke_color = (*self.stroke_color, int(self.opacity * 0.8))
+                        draw.text((stroke_x, stroke_y), self.text, font=font, fill=stroke_color)
         
         # 绘制文本水印
         text_color = (*self.color, self.opacity)
