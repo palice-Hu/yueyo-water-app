@@ -1,0 +1,123 @@
+{
+    "text_watermark": {
+        "text": "水印文本",
+        "font_family": "arial.ttf",
+        "font_size": 36,
+        "color": [
+            255,
+            255,
+            255
+        ],
+        "opacity": 128,
+        "position": [
+            50,
+            50
+        ],
+        "rotation": 0,
+        "bold": false,
+        "italic": false,
+        "shadow": false,
+        "shadow_color": [
+            0,
+            0,
+            0
+        ],
+        "shadow_offset": [
+            2,
+            2
+        ],
+        "stroke": false,
+        "stroke_color": [
+            0,
+            0,
+            0
+        ],
+        "stroke_width": 1
+    },
+    "image_watermark": {
+        "position": [
+            0,
+            0
+        ],
+        "opacity": 128,
+        "scale": 1.0,
+        "rotation": 0
+    },
+    "last_used": {
+        "watermark_type": "text"
+    },
+    "templates": {
+        "text": {
+            "1": {
+                "text": "水印文本123",
+                "font_family": "arial.ttf",
+                "font_size": 47,
+                "color": [
+                    85,
+                    0,
+                    255
+                ],
+                "opacity": 245,
+                "position": [
+                    50,
+                    50
+                ],
+                "rotation": 0,
+                "bold": true,
+                "italic": false,
+                "shadow": true,
+                "shadow_color": [
+                    0,
+                    0,
+                    0
+                ],
+                "shadow_offset": [
+                    2,
+                    2
+                ],
+                "stroke": true,
+                "stroke_color": [
+                    0,
+                    0,
+                    0
+                ],
+                "stroke_width": 1
+            },
+            "2": {
+                "text": "水印文本345",
+                "font_family": "arial.ttf",
+                "font_size": 47,
+                "color": [
+                    85,
+                    0,
+                    255
+                ],
+                "opacity": 245,
+                "position": [
+                    50,
+                    50
+                ],
+                "rotation": 0,
+                "bold": true,
+                "italic": false,
+                "shadow": true,
+                "shadow_color": [
+                    0,
+                    0,
+                    0
+                ],
+                "shadow_offset": [
+                    2,
+                    2
+                ],
+                "stroke": true,
+                "stroke_color": [
+                    0,
+                    0,
+                    0
+                ],
+                "stroke_width": 1
+            }
+        }
+    }
+}

@@ -3,6 +3,7 @@ import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt5.QtWidgets import QFileDialog, QListWidget, QListWidgetItem, QGroupBox, QLineEdit, QSpinBox, QColorDialog
 from PyQt5.QtWidgets import QComboBox, QSlider, QFormLayout, QCheckBox, QTabWidget, QRadioButton, QButtonGroup
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QGridLayout, QSizePolicy
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage, QColor
 
@@ -12,6 +13,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.file_handler import FileHandler
 from modules.text_watermark import TextWatermark
 from modules.image_watermark import ImageWatermark
+from modules.config_manager import ConfigManager
+from utils.helpers import UIHelpers, ImageUtils
 from PIL import Image
 
 class WatermarkApp(QMainWindow):
@@ -20,15 +23,52 @@ class WatermarkApp(QMainWindow):
         self.file_handler = FileHandler()
         self.text_watermark = TextWatermark()
         self.image_watermark = ImageWatermark()
+        self.config_manager = ConfigManager()
         self.image_files = []  # 存储导入的图片文件路径
         self.current_image = None  # 当前选中的图片
         self.current_watermark_image_path = None  # 当前水印图片路径
         self.watermark_type = "text"  # 水印类型：text 或 image
         self.initUI()
+        self.load_last_config()
         
     def initUI(self):
         self.setWindowTitle('水印工具')
         self.setGeometry(100, 100, 1200, 800)
+        
+        # 设置窗口样式
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                border: none;
+                color: white;
+                padding: 8px 16px;
+                text-align: center;
+                text-decoration: none;
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
         
         # 创建中央部件
         central_widget = QWidget()
@@ -53,6 +93,13 @@ class WatermarkApp(QMainWindow):
         self.image_list = QListWidget()
         self.image_list.setSelectionMode(QListWidget.ExtendedSelection)
         self.image_list.itemSelectionChanged.connect(self.on_image_selected)
+        self.image_list.setStyleSheet("""
+            QListWidget {
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+        """)
         
         # 导出区域
         export_group = QGroupBox("导出设置")
@@ -84,12 +131,33 @@ class WatermarkApp(QMainWindow):
         
         # 水印设置标签页
         self.settings_tabs = QTabWidget()
+        self.settings_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+            QTabBar::tab {
+                background: #f0f0f0;
+                border: 1px solid #cccccc;
+                border-bottom-color: #cccccc;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 5px;
+            }
+            QTabBar::tab:selected {
+                background: #e0e0e0;
+                border-bottom-color: #e0e0e0;
+            }
+        """)
         
         # 文本水印设置
         self.create_text_watermark_tab()
         
         # 图片水印设置
         self.create_image_watermark_tab()
+        
+        # 模板管理标签页
+        self.create_template_tab()
         
         middle_panel.addWidget(type_group)
         middle_panel.addWidget(self.settings_tabs)
@@ -103,7 +171,13 @@ class WatermarkApp(QMainWindow):
         self.preview_label = QLabel("请选择图片进行预览")
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumSize(400, 500)
-        self.preview_label.setStyleSheet("border: 1px solid gray;")
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+        """)
         preview_layout.addWidget(self.preview_label)
         preview_group.setLayout(preview_layout)
         
@@ -118,6 +192,7 @@ class WatermarkApp(QMainWindow):
         """创建文本水印设置标签页"""
         text_watermark_widget = QWidget()
         text_layout = QFormLayout()
+        text_layout.setLabelAlignment(Qt.AlignRight)
         
         # 文本内容
         self.text_input = QLineEdit("水印文本")
@@ -136,8 +211,9 @@ class WatermarkApp(QMainWindow):
         self.color_button = QPushButton("选择颜色")
         self.color_button.clicked.connect(self.select_color)
         self.color_label = QLabel()
-        self.color_label.setStyleSheet("background-color: rgb(255, 255, 255); border: 1px solid black;")
+        self.color_label.setStyleSheet("background-color: rgb(255, 255, 255); border: 1px solid black; border-radius: 4px;")
         self.color_label.setFixedWidth(50)
+        self.color_label.setFixedHeight(25)
         color_layout.addWidget(self.color_button)
         color_layout.addWidget(self.color_label)
         text_layout.addRow("字体颜色:", color_layout)
@@ -187,6 +263,7 @@ class WatermarkApp(QMainWindow):
         """创建图片水印设置标签页"""
         image_watermark_widget = QWidget()
         image_layout = QFormLayout()
+        image_layout.setLabelAlignment(Qt.AlignRight)
         
         # 图片水印导入
         import_layout = QHBoxLayout()
@@ -195,7 +272,7 @@ class WatermarkApp(QMainWindow):
         self.watermark_preview = QLabel("无水印图片")
         self.watermark_preview.setFixedHeight(100)
         self.watermark_preview.setAlignment(Qt.AlignCenter)
-        self.watermark_preview.setStyleSheet("border: 1px solid gray;")
+        self.watermark_preview.setStyleSheet("border: 1px solid gray; border-radius: 4px;")
         import_layout.addWidget(self.import_watermark_btn)
         import_layout.addWidget(self.watermark_preview)
         image_layout.addRow("水印图片:", import_layout)
@@ -216,6 +293,224 @@ class WatermarkApp(QMainWindow):
         
         image_watermark_widget.setLayout(image_layout)
         self.settings_tabs.addTab(image_watermark_widget, "图片水印")
+    
+    def create_template_tab(self):
+        """创建模板管理标签页"""
+        template_widget = QWidget()
+        template_layout = QVBoxLayout()
+        
+        # 文本水印模板
+        text_template_group = QGroupBox("文本水印模板")
+        text_template_layout = QVBoxLayout()
+        
+        # 模板列表
+        self.text_template_list = QListWidget()
+        self.text_template_list.itemClicked.connect(self.load_text_template)
+        text_template_layout.addWidget(self.text_template_list)
+        
+        # 模板操作按钮
+        text_template_btn_layout = QHBoxLayout()
+        self.save_text_template_btn = QPushButton("保存模板")
+        self.save_text_template_btn.clicked.connect(self.save_text_template)
+        self.delete_text_template_btn = QPushButton("删除模板")
+        self.delete_text_template_btn.clicked.connect(self.delete_text_template)
+        text_template_btn_layout.addWidget(self.save_text_template_btn)
+        text_template_btn_layout.addWidget(self.delete_text_template_btn)
+        text_template_layout.addLayout(text_template_btn_layout)
+        
+        text_template_group.setLayout(text_template_layout)
+        
+        # 图片水印模板
+        image_template_group = QGroupBox("图片水印模板")
+        image_template_layout = QVBoxLayout()
+        
+        # 模板列表
+        self.image_template_list = QListWidget()
+        self.image_template_list.itemClicked.connect(self.load_image_template)
+        image_template_layout.addWidget(self.image_template_list)
+        
+        # 模板操作按钮
+        image_template_btn_layout = QHBoxLayout()
+        self.save_image_template_btn = QPushButton("保存模板")
+        self.save_image_template_btn.clicked.connect(self.save_image_template)
+        self.delete_image_template_btn = QPushButton("删除模板")
+        self.delete_image_template_btn.clicked.connect(self.delete_image_template)
+        image_template_btn_layout.addWidget(self.save_image_template_btn)
+        image_template_btn_layout.addWidget(self.delete_image_template_btn)
+        image_template_layout.addLayout(image_template_btn_layout)
+        
+        image_template_group.setLayout(image_template_layout)
+        
+        template_layout.addWidget(text_template_group)
+        template_layout.addWidget(image_template_group)
+        
+        template_widget.setLayout(template_layout)
+        self.settings_tabs.addTab(template_widget, "模板管理")
+        
+        # 加载模板列表
+        self.refresh_template_lists()
+    
+    def refresh_template_lists(self):
+        """刷新模板列表"""
+        # 清空列表
+        self.text_template_list.clear()
+        self.image_template_list.clear()
+        
+        # 加载文本模板
+        text_templates = self.config_manager.get_text_templates()
+        for name in text_templates.keys():
+            self.text_template_list.addItem(name)
+        
+        # 加载图片模板
+        image_templates = self.config_manager.get_image_templates()
+        for name in image_templates.keys():
+            self.image_template_list.addItem(name)
+    
+    def save_text_template(self):
+        """保存文本水印模板"""
+        name, ok = QInputDialog.getText(self, "保存文本模板", "请输入模板名称:")
+        if ok and name:
+            # 获取当前文本水印设置
+            settings = {
+                "text": self.text_watermark.text,
+                "font_family": self.text_watermark.font_family,
+                "font_size": self.text_watermark.font_size,
+                "color": self.text_watermark.color,
+                "opacity": self.text_watermark.opacity,
+                "position": self.text_watermark.position,
+                "rotation": self.text_watermark.rotation,
+                "bold": self.text_watermark.bold,
+                "italic": self.text_watermark.italic,
+                "shadow": self.text_watermark.shadow,
+                "shadow_color": self.text_watermark.shadow_color,
+                "shadow_offset": self.text_watermark.shadow_offset,
+                "stroke": self.text_watermark.stroke,
+                "stroke_color": self.text_watermark.stroke_color,
+                "stroke_width": self.text_watermark.stroke_width
+            }
+            
+            if self.config_manager.save_text_watermark_template(name, settings):
+                QMessageBox.information(self, "成功", f"文本水印模板 '{name}' 保存成功!")
+                self.refresh_template_lists()
+            else:
+                QMessageBox.warning(self, "错误", f"保存文本水印模板 '{name}' 失败!")
+    
+    def save_image_template(self):
+        """保存图片水印模板"""
+        name, ok = QInputDialog.getText(self, "保存图片模板", "请输入模板名称:")
+        if ok and name:
+            # 获取当前图片水印设置
+            settings = {
+                "position": self.image_watermark.position,
+                "opacity": self.image_watermark.opacity,
+                "scale": self.image_watermark.scale,
+                "rotation": self.image_watermark.rotation
+            }
+            
+            if self.config_manager.save_image_watermark_template(name, settings):
+                QMessageBox.information(self, "成功", f"图片水印模板 '{name}' 保存成功!")
+                self.refresh_template_lists()
+            else:
+                QMessageBox.warning(self, "错误", f"保存图片水印模板 '{name}' 失败!")
+    
+    def load_text_template(self, item):
+        """加载文本水印模板"""
+        name = item.text()
+        settings = self.config_manager.load_text_watermark_template(name)
+        
+        if settings:
+            # 应用模板设置
+            self.text_watermark.set_text(settings.get("text", "水印文本"))
+            self.text_watermark.set_font(
+                settings.get("font_family", "arial.ttf"),
+                settings.get("font_size", 36)
+            )
+            self.text_watermark.set_color(settings.get("color", (255, 255, 255)))
+            self.text_watermark.set_opacity(settings.get("opacity", 128))
+            self.text_watermark.set_position(settings.get("position", (50, 50)))
+            self.text_watermark.set_rotation(settings.get("rotation", 0))
+            self.text_watermark.set_bold(settings.get("bold", False))
+            self.text_watermark.set_italic(settings.get("italic", False))
+            self.text_watermark.set_shadow(
+                settings.get("shadow", False),
+                settings.get("shadow_color", (0, 0, 0)),
+                settings.get("shadow_offset", (2, 2))
+            )
+            self.text_watermark.set_stroke(
+                settings.get("stroke", False),
+                settings.get("stroke_color", (0, 0, 0)),
+                settings.get("stroke_width", 1)
+            )
+            
+            # 更新UI控件
+            self.text_input.setText(settings.get("text", "水印文本"))
+            self.font_size_input.setValue(settings.get("font_size", 36))
+            self.opacity_slider.setValue(settings.get("opacity", 128))
+            self.bold_checkbox.setChecked(settings.get("bold", False))
+            self.italic_checkbox.setChecked(settings.get("italic", False))
+            self.shadow_checkbox.setChecked(settings.get("shadow", False))
+            self.stroke_checkbox.setChecked(settings.get("stroke", False))
+            
+            color = settings.get("color", (255, 255, 255))
+            self.color_label.setStyleSheet(f"background-color: rgb({color[0]}, {color[1]}, {color[2]}); border: 1px solid black; border-radius: 4px;")
+            
+            QMessageBox.information(self, "成功", f"文本水印模板 '{name}' 加载成功!")
+            self.update_preview()
+        else:
+            QMessageBox.warning(self, "错误", f"加载文本水印模板 '{name}' 失败!")
+    
+    def load_image_template(self, item):
+        """加载图片水印模板"""
+        name = item.text()
+        settings = self.config_manager.load_image_watermark_template(name)
+        
+        if settings:
+            # 应用模板设置
+            self.image_watermark.set_position(settings.get("position", (0, 0)))
+            self.image_watermark.set_opacity(settings.get("opacity", 128))
+            self.image_watermark.set_scale(settings.get("scale", 1.0))
+            self.image_watermark.set_rotation(settings.get("rotation", 0))
+            
+            # 更新UI控件
+            self.image_opacity_slider.setValue(settings.get("opacity", 128))
+            self.scale_slider.setValue(int(settings.get("scale", 1.0) * 100))
+            
+            QMessageBox.information(self, "成功", f"图片水印模板 '{name}' 加载成功!")
+            self.update_preview()
+        else:
+            QMessageBox.warning(self, "错误", f"加载图片水印模板 '{name}' 失败!")
+    
+    def delete_text_template(self):
+        """删除选中的文本水印模板"""
+        current_item = self.text_template_list.currentItem()
+        if current_item:
+            name = current_item.text()
+            reply = QMessageBox.question(self, "确认删除", f"确定要删除文本水印模板 '{name}' 吗？",
+                                       QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                if self.config_manager.delete_text_template(name):
+                    QMessageBox.information(self, "成功", f"文本水印模板 '{name}' 删除成功!")
+                    self.refresh_template_lists()
+                else:
+                    QMessageBox.warning(self, "错误", f"删除文本水印模板 '{name}' 失败!")
+        else:
+            QMessageBox.warning(self, "警告", "请先选择要删除的文本模板!")
+    
+    def delete_image_template(self):
+        """删除选中的图片水印模板"""
+        current_item = self.image_template_list.currentItem()
+        if current_item:
+            name = current_item.text()
+            reply = QMessageBox.question(self, "确认删除", f"确定要删除图片水印模板 '{name}' 吗？",
+                                       QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                if self.config_manager.delete_image_template(name):
+                    QMessageBox.information(self, "成功", f"图片水印模板 '{name}' 删除成功!")
+                    self.refresh_template_lists()
+                else:
+                    QMessageBox.warning(self, "错误", f"删除图片水印模板 '{name}' 失败!")
+        else:
+            QMessageBox.warning(self, "警告", "请先选择要删除的图片模板!")
     
     def on_watermark_type_changed(self):
         """当水印类型改变时"""
@@ -266,7 +561,7 @@ class WatermarkApp(QMainWindow):
                 self.image_files.extend(image_files)
                 self.update_image_list()
             except Exception as e:
-                print(f"导入文件夹失败: {str(e)}")
+                QMessageBox.warning(self, "错误", f"导入文件夹失败: {str(e)}")
     
     def import_watermark_image(self):
         """导入水印图片"""
@@ -289,7 +584,7 @@ class WatermarkApp(QMainWindow):
                 
                 self.update_preview()
             except Exception as e:
-                print(f"导入水印图片失败: {str(e)}")
+                QMessageBox.warning(self, "错误", f"导入水印图片失败: {str(e)}")
     
     def update_image_list(self):
         """更新图片列表显示"""
@@ -308,7 +603,7 @@ class WatermarkApp(QMainWindow):
                 self.current_image = self.file_handler.load_image(file_path)
                 self.update_preview()
             except Exception as e:
-                print(f"加载图片失败: {str(e)}")
+                QMessageBox.warning(self, "错误", f"加载图片失败: {str(e)}")
     
     def update_preview(self):
         """更新预览"""
@@ -327,24 +622,22 @@ class WatermarkApp(QMainWindow):
     
     def display_image(self, image):
         """在预览区域显示图片"""
-        # 转换PIL图像为QPixmap并显示
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        try:
+            # 转换PIL图像为QPixmap并显示
+            pixmap = UIHelpers.create_pixmap_from_pil_image(image)
             
-        data = image.tobytes("raw", "RGB")
-        qimage = QImage(data, image.width, image.height, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimage)
-        
-        # 缩放图片以适应预览区域
-        scaled_pixmap = pixmap.scaled(
-            self.preview_label.width() - 10, 
-            self.preview_label.height() - 10, 
-            Qt.KeepAspectRatio, 
-            Qt.SmoothTransformation
-        )
-        
-        self.preview_label.setPixmap(scaled_pixmap)
-        self.preview_label.setText("")
+            # 缩放图片以适应预览区域
+            scaled_pixmap = pixmap.scaled(
+                self.preview_label.width() - 20, 
+                self.preview_label.height() - 20, 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            
+            self.preview_label.setPixmap(scaled_pixmap)
+            self.preview_label.setText("")
+        except Exception as e:
+            self.preview_label.setText(f"预览错误: {str(e)}")
     
     def select_color(self):
         """选择字体颜色"""
@@ -352,18 +645,22 @@ class WatermarkApp(QMainWindow):
         if color.isValid():
             rgb = (color.red(), color.green(), color.blue())
             self.text_watermark.set_color(rgb)
-            self.color_label.setStyleSheet(f"background-color: rgb({rgb[0]}, {rgb[1]}, {rgb[2]}); border: 1px solid black;")
+            self.color_label.setStyleSheet(f"background-color: rgb({rgb[0]}, {rgb[1]}, {rgb[2]}); border: 1px solid black; border-radius: 4px;")
             self.update_preview()
     
     def export_images(self):
         """导出添加水印后的图片"""
         if not self.image_files:
+            QMessageBox.warning(self, "警告", "请先导入图片!")
             return
             
         # 选择导出目录
         output_dir = QFileDialog.getExistingDirectory(self, "选择导出目录")
         if not output_dir:
             return
+        
+        success_count = 0
+        fail_count = 0
             
         # 处理并导出每张图片
         for file_path in self.image_files:
@@ -388,8 +685,46 @@ class WatermarkApp(QMainWindow):
                 
                 # 保存图片
                 self.file_handler.save_image(watermarked_image, output_path)
+                success_count += 1
             except Exception as e:
                 print(f"导出图片失败 {file_path}: {str(e)}")
+                fail_count += 1
+        
+        # 显示导出结果
+        QMessageBox.information(self, "导出完成", f"成功导出 {success_count} 张图片\n失败 {fail_count} 张图片")
+    
+    def load_last_config(self):
+        """加载上次使用的配置"""
+        try:
+            config = self.config_manager.load_config()
+            last_used = config.get("last_used", {})
+            
+            # 设置上次使用的水印类型
+            watermark_type = last_used.get("watermark_type", "text")
+            if watermark_type == "image":
+                self.image_radio.setChecked(True)
+                self.watermark_type = "image"
+            else:
+                self.text_radio.setChecked(True)
+                self.watermark_type = "text"
+        except Exception as e:
+            print(f"加载上次配置失败: {str(e)}")
+    
+    def save_current_config(self):
+        """保存当前配置"""
+        try:
+            config = self.config_manager.load_config()
+            config["last_used"] = {
+                "watermark_type": self.watermark_type
+            }
+            self.config_manager.save_config(config)
+        except Exception as e:
+            print(f"保存当前配置失败: {str(e)}")
+    
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        self.save_current_config()
+        event.accept()
 
 def main():
     app = QApplication(sys.argv)
