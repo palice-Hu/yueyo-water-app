@@ -3,8 +3,8 @@ import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt5.QtWidgets import QFileDialog, QListWidget, QListWidgetItem, QGroupBox, QLineEdit, QSpinBox, QColorDialog
 from PyQt5.QtWidgets import QComboBox, QSlider, QFormLayout, QCheckBox, QTabWidget, QRadioButton, QButtonGroup
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QGridLayout, QSizePolicy
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QGridLayout, QSizePolicy, QButtonGroup
+from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QPixmap, QImage, QColor
 
 # 添加项目根目录到Python路径
@@ -16,6 +16,49 @@ from modules.image_watermark import ImageWatermark
 from modules.config_manager import ConfigManager
 from utils.helpers import UIHelpers, ImageUtils
 from PIL import Image
+
+class DraggableLabel(QLabel):
+    """
+    可拖拽的标签，用于手动定位水印
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_app = None
+        self.drag_start_position = QPoint()
+        self.setMouseTracking(True)
+        
+    def set_parent_app(self, parent_app):
+        self.parent_app = parent_app
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_position = event.pos()
+            
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.LeftButton:
+            # 计算移动距离
+            delta = event.pos() - self.drag_start_position
+            
+            # 更新水印位置
+            if self.parent_app:
+                if self.parent_app.watermark_type == "text":
+                    current_pos = self.parent_app.text_watermark.position
+                    new_pos = (current_pos[0] + delta.x(), current_pos[1] + delta.y())
+                    self.parent_app.text_watermark.set_position(new_pos)
+                else:
+                    current_pos = self.parent_app.image_watermark.position
+                    new_pos = (current_pos[0] + delta.x(), current_pos[1] + delta.y())
+                    self.parent_app.image_watermark.set_position(new_pos)
+                
+                # 更新预览
+                self.parent_app.update_preview()
+                
+            self.drag_start_position = event.pos()
+    
+    def mouseReleaseEvent(self, event):
+        # 鼠标释放时更新位置输入框
+        if self.parent_app:
+            self.parent_app.update_position_inputs()
 
 class WatermarkApp(QMainWindow):
     def __init__(self):
@@ -168,7 +211,8 @@ class WatermarkApp(QMainWindow):
         # 预览区域
         preview_group = QGroupBox("预览")
         preview_layout = QVBoxLayout()
-        self.preview_label = QLabel("请选择图片进行预览")
+        self.preview_label = DraggableLabel("请选择图片进行预览")
+        self.preview_label.set_parent_app(self)
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumSize(400, 500)
         self.preview_label.setStyleSheet("""
@@ -225,6 +269,55 @@ class WatermarkApp(QMainWindow):
         self.opacity_slider.valueChanged.connect(lambda value: self.text_watermark.set_opacity(value))
         text_layout.addRow("透明度:", self.opacity_slider)
         
+        # 位置坐标
+        position_layout = QHBoxLayout()
+        self.x_position_input = QSpinBox()
+        self.x_position_input.setRange(0, 5000)
+        self.x_position_input.setValue(50)
+        self.x_position_input.valueChanged.connect(self.on_position_changed)
+        self.y_position_input = QSpinBox()
+        self.y_position_input.setRange(0, 5000)
+        self.y_position_input.setValue(50)
+        self.y_position_input.valueChanged.connect(self.on_position_changed)
+        position_layout.addWidget(QLabel("X:"))
+        position_layout.addWidget(self.x_position_input)
+        position_layout.addWidget(QLabel("Y:"))
+        position_layout.addWidget(self.y_position_input)
+        text_layout.addRow("位置坐标:", position_layout)
+        
+        # 九宫格预设位置
+        preset_layout = QGridLayout()
+        positions = [
+            ("左上", "top-left"), ("上中", "top-center"), ("右上", "top-right"),
+            ("左中", "center-left"), ("居中", "center"), ("右中", "center-right"),
+            ("左下", "bottom-left"), ("下中", "bottom-center"), ("右下", "bottom-right")
+        ]
+        
+        self.position_buttons = {}
+        for i, (label, pos) in enumerate(positions):
+            row = i // 3
+            col = i % 3
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, p=pos: self.set_preset_position(p))
+            preset_layout.addWidget(btn, row, col)
+            self.position_buttons[pos] = btn
+        
+        position_group = QGroupBox("预设位置")
+        position_group.setLayout(preset_layout)
+        text_layout.addRow(position_group)
+        
+        # 旋转角度
+        self.rotation_slider = QSlider(Qt.Horizontal)
+        self.rotation_slider.setRange(0, 360)
+        self.rotation_slider.setValue(0)
+        self.rotation_slider.valueChanged.connect(lambda value: self.text_watermark.set_rotation(value))
+        self.rotation_label = QLabel("0°")
+        self.rotation_label.setFixedWidth(30)
+        rotation_layout = QHBoxLayout()
+        rotation_layout.addWidget(self.rotation_slider)
+        rotation_layout.addWidget(self.rotation_label)
+        text_layout.addRow("旋转角度:", rotation_layout)
+        
         # 高级文本设置
         advanced_group = QGroupBox("高级设置")
         advanced_layout = QVBoxLayout()
@@ -277,6 +370,43 @@ class WatermarkApp(QMainWindow):
         import_layout.addWidget(self.watermark_preview)
         image_layout.addRow("水印图片:", import_layout)
         
+        # 位置坐标
+        position_layout = QHBoxLayout()
+        self.image_x_position_input = QSpinBox()
+        self.image_x_position_input.setRange(0, 5000)
+        self.image_x_position_input.setValue(0)
+        self.image_x_position_input.valueChanged.connect(self.on_image_position_changed)
+        self.image_y_position_input = QSpinBox()
+        self.image_y_position_input.setRange(0, 5000)
+        self.image_y_position_input.setValue(0)
+        self.image_y_position_input.valueChanged.connect(self.on_image_position_changed)
+        position_layout.addWidget(QLabel("X:"))
+        position_layout.addWidget(self.image_x_position_input)
+        position_layout.addWidget(QLabel("Y:"))
+        position_layout.addWidget(self.image_y_position_input)
+        image_layout.addRow("位置坐标:", position_layout)
+        
+        # 九宫格预设位置
+        preset_layout = QGridLayout()
+        positions = [
+            ("左上", "top-left"), ("上中", "top-center"), ("右上", "top-right"),
+            ("左中", "center-left"), ("居中", "center"), ("右中", "center-right"),
+            ("左下", "bottom-left"), ("下中", "bottom-center"), ("右下", "bottom-right")
+        ]
+        
+        self.image_position_buttons = {}
+        for i, (label, pos) in enumerate(positions):
+            row = i // 3
+            col = i % 3
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, p=pos: self.set_image_preset_position(p))
+            preset_layout.addWidget(btn, row, col)
+            self.image_position_buttons[pos] = btn
+        
+        position_group = QGroupBox("预设位置")
+        position_group.setLayout(preset_layout)
+        image_layout.addRow(position_group)
+        
         # 缩放
         self.scale_slider = QSlider(Qt.Horizontal)
         self.scale_slider.setRange(1, 200)
@@ -290,6 +420,18 @@ class WatermarkApp(QMainWindow):
         self.image_opacity_slider.setValue(128)
         self.image_opacity_slider.valueChanged.connect(lambda value: self.image_watermark.set_opacity(value))
         image_layout.addRow("透明度:", self.image_opacity_slider)
+        
+        # 旋转角度
+        self.image_rotation_slider = QSlider(Qt.Horizontal)
+        self.image_rotation_slider.setRange(0, 360)
+        self.image_rotation_slider.setValue(0)
+        self.image_rotation_slider.valueChanged.connect(lambda value: self.image_watermark.set_rotation(value))
+        self.image_rotation_label = QLabel("0°")
+        self.image_rotation_label.setFixedWidth(30)
+        rotation_layout = QHBoxLayout()
+        rotation_layout.addWidget(self.image_rotation_slider)
+        rotation_layout.addWidget(self.image_rotation_label)
+        image_layout.addRow("旋转角度:", rotation_layout)
         
         image_watermark_widget.setLayout(image_layout)
         self.settings_tabs.addTab(image_watermark_widget, "图片水印")
@@ -450,6 +592,12 @@ class WatermarkApp(QMainWindow):
             self.italic_checkbox.setChecked(settings.get("italic", False))
             self.shadow_checkbox.setChecked(settings.get("shadow", False))
             self.stroke_checkbox.setChecked(settings.get("stroke", False))
+            self.rotation_slider.setValue(settings.get("rotation", 0))
+            self.rotation_label.setText(f"{settings.get('rotation', 0)}°")
+            
+            position = settings.get("position", (50, 50))
+            self.x_position_input.setValue(position[0])
+            self.y_position_input.setValue(position[1])
             
             color = settings.get("color", (255, 255, 255))
             self.color_label.setStyleSheet(f"background-color: rgb({color[0]}, {color[1]}, {color[2]}); border: 1px solid black; border-radius: 4px;")
@@ -474,6 +622,12 @@ class WatermarkApp(QMainWindow):
             # 更新UI控件
             self.image_opacity_slider.setValue(settings.get("opacity", 128))
             self.scale_slider.setValue(int(settings.get("scale", 1.0) * 100))
+            self.image_rotation_slider.setValue(settings.get("rotation", 0))
+            self.image_rotation_label.setText(f"{settings.get('rotation', 0)}°")
+            
+            position = settings.get("position", (0, 0))
+            self.image_x_position_input.setValue(position[0])
+            self.image_y_position_input.setValue(position[1])
             
             QMessageBox.information(self, "成功", f"图片水印模板 '{name}' 加载成功!")
             self.update_preview()
@@ -535,6 +689,55 @@ class WatermarkApp(QMainWindow):
         else:
             self.text_watermark.set_stroke(False)
         self.update_preview()
+    
+    def on_position_changed(self):
+        """当文本水印位置改变时"""
+        x = self.x_position_input.value()
+        y = self.y_position_input.value()
+        self.text_watermark.set_position((x, y))
+        self.update_preview()
+    
+    def on_image_position_changed(self):
+        """当图片水印位置改变时"""
+        x = self.image_x_position_input.value()
+        y = self.image_y_position_input.value()
+        self.image_watermark.set_position((x, y))
+        self.update_preview()
+    
+    def set_preset_position(self, position_type):
+        """设置文本水印预设位置"""
+        if self.current_image:
+            # 获取水印大小（简化处理）
+            if self.watermark_type == "text":
+                watermark_size = (100, 50)  # 简化处理，实际应该计算文本大小
+                image_size = self.current_image.size
+                position = ImageUtils.calculate_watermark_position(image_size, watermark_size, position_type)
+                self.text_watermark.set_position(position)
+                self.x_position_input.setValue(position[0])
+                self.y_position_input.setValue(position[1])
+                self.update_preview()
+    
+    def set_image_preset_position(self, position_type):
+        """设置图片水印预设位置"""
+        if self.current_image and self.image_watermark.watermark_image:
+            watermark_size = self.image_watermark.watermark_image.size
+            image_size = self.current_image.size
+            position = ImageUtils.calculate_watermark_position(image_size, watermark_size, position_type)
+            self.image_watermark.set_position(position)
+            self.image_x_position_input.setValue(position[0])
+            self.image_y_position_input.setValue(position[1])
+            self.update_preview()
+    
+    def update_position_inputs(self):
+        """更新位置输入框的值"""
+        if self.watermark_type == "text":
+            position = self.text_watermark.position
+            self.x_position_input.setValue(position[0])
+            self.y_position_input.setValue(position[1])
+        else:
+            position = self.image_watermark.position
+            self.image_x_position_input.setValue(position[0])
+            self.image_y_position_input.setValue(position[1])
     
     def import_images(self):
         """导入图片文件"""
