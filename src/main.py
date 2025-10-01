@@ -243,12 +243,18 @@ class WatermarkApp(QMainWindow):
         self.text_input.textChanged.connect(lambda text: self.text_watermark.set_text(text))
         text_layout.addRow("文本内容:", self.text_input)
         
-        # 字体大小
+        # 字体选择
+        font_layout = QHBoxLayout()
+        self.font_combo = QComboBox()
+        self.populate_font_list()
+        self.font_combo.currentTextChanged.connect(self.on_font_changed)
         self.font_size_input = QSpinBox()
         self.font_size_input.setRange(10, 100)
         self.font_size_input.setValue(36)
-        self.font_size_input.valueChanged.connect(lambda size: self.text_watermark.set_font(self.text_watermark.font_family, size))
-        text_layout.addRow("字体大小:", self.font_size_input)
+        self.font_size_input.valueChanged.connect(self.on_font_size_changed)
+        font_layout.addWidget(self.font_combo)
+        font_layout.addWidget(self.font_size_input)
+        text_layout.addRow("字体:", font_layout)
         
         # 字体颜色
         color_layout = QHBoxLayout()
@@ -351,6 +357,26 @@ class WatermarkApp(QMainWindow):
         
         text_watermark_widget.setLayout(text_layout)
         self.settings_tabs.addTab(text_watermark_widget, "文本水印")
+    
+    def populate_font_list(self):
+        """填充字体列表"""
+        fonts = self.text_watermark.get_font_families()
+        self.font_combo.addItems(fonts)
+        # 设置默认选中第一个可用字体
+        if fonts:
+            self.font_combo.setCurrentText(fonts[0])
+    
+    def on_font_changed(self, font_family):
+        """当字体改变时"""
+        font_size = self.font_size_input.value()
+        self.text_watermark.set_font(font_family, font_size)
+        self.update_preview()
+    
+    def on_font_size_changed(self, font_size):
+        """当字体大小改变时"""
+        font_family = self.font_combo.currentText()
+        self.text_watermark.set_font(font_family, font_size)
+        self.update_preview()
     
     def create_image_watermark_tab(self):
         """创建图片水印设置标签页"""
@@ -564,7 +590,7 @@ class WatermarkApp(QMainWindow):
             # 应用模板设置
             self.text_watermark.set_text(settings.get("text", "水印文本"))
             self.text_watermark.set_font(
-                settings.get("font_family", "arial.ttf"),
+                settings.get("font_family", self.text_watermark._get_default_font()),
                 settings.get("font_size", 36)
             )
             self.text_watermark.set_color(settings.get("color", (255, 255, 255)))
@@ -594,6 +620,15 @@ class WatermarkApp(QMainWindow):
             self.stroke_checkbox.setChecked(settings.get("stroke", False))
             self.rotation_slider.setValue(settings.get("rotation", 0))
             self.rotation_label.setText(f"{settings.get('rotation', 0)}°")
+            
+            # 更新字体选择
+            font_family = settings.get("font_family", self.text_watermark._get_default_font())
+            index = self.font_combo.findText(font_family)
+            if index >= 0:
+                self.font_combo.setCurrentIndex(index)
+            else:
+                self.font_combo.addItem(font_family)
+                self.font_combo.setCurrentText(font_family)
             
             position = settings.get("position", (50, 50))
             self.x_position_input.setValue(position[0])
